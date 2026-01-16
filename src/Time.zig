@@ -106,44 +106,34 @@ pub fn format(
 
 pub const MAX_HOURS = 24;
 
-pub const HoursInt = @Type(.{
-    .int = .{
-        .bits = std.math.log2_int_ceil(u64, MAX_HOURS),
-        .signedness = .unsigned,
-    },
-});
+pub const HoursInt = @Int(
+    .unsigned,
+    std.math.log2_int_ceil(u64, MAX_HOURS),
+);
 
-pub const MinutesInt = @Type(.{
-    .int = .{
-        .bits = std.math.log2_int_ceil(u64, min_per_hour),
-        .signedness = .unsigned,
-    },
-});
+pub const MinutesInt = @Int(
+    .unsigned,
+    std.math.log2_int_ceil(u64, min_per_hour),
+);
 
-pub const SecondsInt = @Type(.{
-    .int = .{
-        .bits = std.math.log2_int_ceil(u64, s_per_min),
-        .signedness = .unsigned,
-    },
-});
+pub const SecondsInt = @Int(
+    .unsigned,
+    std.math.log2_int_ceil(u64, s_per_min),
+);
 
 /// The number of seconds in a day
 pub const SECONDS_PER_DAY = MAX_HOURS * std.time.s_per_hour;
-pub const SecsInt = @Type(.{
-    .int = .{
-        .bits = std.math.log2_int_ceil(u64, SECONDS_PER_DAY),
-        .signedness = .unsigned,
-    },
-});
+pub const SecsInt = @Int(
+    .unsigned,
+    std.math.log2_int_ceil(u64, SECONDS_PER_DAY),
+);
 
 /// Frac can be up to two seconds to represent leap seconds
 pub const MAX_FRAC = 2 * std.time.ns_per_s;
-pub const FracInt = @Type(.{
-    .int = .{
-        .bits = std.math.log2_int_ceil(u64, MAX_FRAC),
-        .signedness = .unsigned,
-    },
-});
+pub const FracInt = @Int(
+    .unsigned,
+    std.math.log2_int_ceil(u64, MAX_FRAC),
+);
 
 test "time hour, minute, second" {
     try std.testing.expectEqual(@as(HoursInt, 3), (try Time.hms(3, 5, 7)).hour());

@@ -1,12 +1,12 @@
 const std = @import("std");
 const chrono = @import("chrono");
 
-pub fn main() !void {
-    var gpa_allocator = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa_allocator.deinit();
-    const gpa = gpa_allocator.allocator();
+pub fn main(init: std.process.Init) !void {
+    const io = init.io;
+    const gpa = init.gpa;
+    const environ = init.minimal.environ;
 
-    var tzdb = try chrono.tz.DataBase.init(gpa);
+    var tzdb = try chrono.tz.DataBase.init(gpa, io, environ);
     defer tzdb.deinit();
 
     const timezone = try tzdb.getLocalTimeZone();

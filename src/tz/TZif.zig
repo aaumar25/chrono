@@ -230,52 +230,54 @@ pub const Header = struct {
             this.isutcnt;
     }
 
-    pub fn parse(reader: anytype, seekableStream: anytype) !Header {
-        var magic_buf: [4]u8 = undefined;
-        try reader.readNoEof(&magic_buf);
-        if (!std.mem.eql(u8, "TZif", &magic_buf)) {
+    pub fn parse(reader: *std.Io.Reader) !Header {
+        try reader.interface.take(4);
+        if (!std.mem.eql(u8, "TZif", reader.interface.buffered())) {
             log.warn("File is missing magic string 'TZif'", .{});
             return error.InvalidFormat;
         }
 
         // Check verison
-        const version = reader.readEnum(Version, .little) catch |err| switch (err) {
+        const version = reader.interface.takeEnum(Version, .little) catch |err| switch (err) {
             error.InvalidValue => return error.UnsupportedVersion,
             else => |e| return e,
         };
         if (version == .V1) {
             return error.UnsupportedVersion;
         }
-
         // Seek past reserved bytes
-        try seekableStream.seekBy(15);
+        try reader.interface.toss(15);
 
         return Header{
             .version = version,
-            .isutcnt = try reader.readInt(u32, .big),
-            .isstdcnt = try reader.readInt(u32, .big),
-            .leapcnt = try reader.readInt(u32, .big),
-            .timecnt = try reader.readInt(u32, .big),
-            .typecnt = try reader.readInt(u32, .big),
-            .charcnt = try reader.readInt(u32, .big),
+            .isutcnt = try reader.interface.takeInt(u32, .big),
+            .isstdcnt = try reader.interface.takeInt(u32, .big),
+            .leapcnt = try reader.interface.takeInt(u32, .big),
+            .timecnt = try reader.interface.takeInt(u32, .big),
+            .typecnt = try reader.interface.takeInt(u32, .big),
+            .charcnt = try reader.interface.takeInt(u32, .big),
         };
     }
 };
 
-pub fn parse(allocator: std.mem.Allocator, reader: anytype, seekableStream: anytype) !TZif {
-    const v1_header = try Header.parse(reader, seekableStream);
-    try seekableStream.seekBy(v1_header.dataSize(.V1));
+pub fn parse(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    reader: *std.Io.Reader,
+) !TZif {
+    const v1_header = try Header.parse(io, reader);
+    try reader.interface.toss(v1_header.dataSize(.V1));
 
-    const v2_header = try Header.parse(reader, seekableStream);
+    const v2_header = try Header.parse(io, reader);
 
     // Parse transition times
     var transition_times = try allocator.alloc(i64, v2_header.timecnt);
-    errdefer allocator.free(transition_times);
+    defer allocator.free(transition_times);
     {
         var prev: i64 = -(2 << 59); // Earliest time supported, this is earlier than the big bang
         var i: usize = 0;
         while (i < transition_times.len) : (i += 1) {
-            transition_times[i] = try reader.readInt(i64, .big);
+            transition_times[i] = try reader.takeInt(i64, .big);
             if (transition_times[i] <= prev) {
                 return error.InvalidFormat;
             }
@@ -285,7 +287,7 @@ pub fn parse(allocator: std.mem.Allocator, reader: anytype, seekableStream: anyt
 
     // Parse transition types
     const transition_types = try allocator.alloc(u8, v2_header.timecnt);
-    errdefer allocator.free(transition_types);
+    defer allocator.free(transition_types);
     try reader.readNoEof(transition_types);
     for (transition_types) |transition_type| {
         if (transition_type >= v2_header.typecnt) {
@@ -386,8 +388,8 @@ pub fn parse(allocator: std.mem.Allocator, reader: anytype, seekableStream: anyt
     return TZif{
         .allocator = allocator,
         .version = v2_header.version,
-        .transitionTimes = transition_times,
-        .transitionTypes = transition_types,
+        .transitionTimes = try allocator.dupe(i64, transition_times),
+        .transitionTypes = try allocator.dupe(u8, transition_types),
         .localTimeTypes = local_time_types,
         .designations = time_zone_designations,
         .leapSeconds = leap_seconds,
@@ -399,7 +401,7 @@ pub fn parse(allocator: std.mem.Allocator, reader: anytype, seekableStream: anyt
 }
 
 pub fn parseFile(allocator: std.mem.Allocator, path: []const u8) !TZif {
-    const cwd = std.fs.cwd();
+    const cwd = std.Io.Dir.cwd();
 
     const file = try cwd.openFile(path, .{});
     defer file.close();
