@@ -10,8 +10,9 @@ pub fn main(init: std.process.Init) !void {
     defer tzdb.deinit();
 
     const timezone = try tzdb.getLocalTimeZone();
-
-    const timestamp_utc = std.time.timestamp();
+    const clock: std.Io.Clock = .real;
+    const timestamp_nano = try clock.now(io);
+    const timestamp_utc = timestamp_nano.toSeconds();
     const local_offset = timezone.offsetAtTimestamp(timestamp_utc) orelse {
         std.debug.print("Could not convert the current time to local time.", .{});
         return error.ConversionFailed;
@@ -26,7 +27,7 @@ pub fn main(init: std.process.Init) !void {
     std.debug.print("The current date is {}, and the time is {} in the {?s} timezone\n", .{ date, time, designation });
 
     if (timezone.identifier()) |identifier| {
-        std.debug.print("The IANA time zone identifier = \"{}\"\n", .{std.zig.fmtEscapes(identifier.string)});
+        std.debug.print("The IANA time zone identifier = \"{}\"\n", .{std.zig.fmtString(identifier.string)});
     } else {
         std.debug.print("The IANA time zone identifier is unknown\n", .{});
     }

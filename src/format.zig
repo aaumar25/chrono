@@ -123,7 +123,7 @@ pub fn parseFormatAlloc(allocator: std.mem.Allocator, format_str: []const u8) ![
         }
     }
 
-    return parts.toOwnedSlice();
+    return parts.toOwnedSlice(gpa);
 }
 
 pub fn formatNaiveDateTimeParts(writer: *std.Io.Writer, parts: []const Part, dt: NaiveDateTime) !void {

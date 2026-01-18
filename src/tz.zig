@@ -100,7 +100,7 @@ pub const DataBase = struct {
         }
 
         if (this.tzif_dir) |*tzif_dir| {
-            tzif_dir.close();
+            tzif_dir.close(this.io);
         }
     }
 
@@ -126,7 +126,7 @@ pub const DataBase = struct {
             var reader_buf: [4096]u8 = undefined;
             var file_reader = tzif_file.reader(this.io, &reader_buf);
             const tzif = try this.gpa.create(TZif);
-            tzif.* = try TZif.parse(this.gpa, &file_reader.interface, tzif_file.seekableStream());
+            tzif.* = try TZif.parse(this.gpa, &file_reader.interface);
 
             const identifier_owned = try this.gpa.dupe(u8, identifier.string);
             try this.tzif_cache.putNoClobber(this.gpa, identifier_owned, tzif);
@@ -219,7 +219,8 @@ pub const DataBase = struct {
         const identifier = try Identifier.parse(identifier_string.items);
         const timezone = try this.getTimeZone(identifier);
 
-        this.localtime_identifier = try identifier_string.toOwnedSlice();
+        this.localtime_identifier =
+            try identifier_string.toOwnedSlice(this.gpa);
 
         return timezone;
     }

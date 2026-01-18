@@ -1,25 +1,25 @@
 allocator: std.mem.Allocator,
 version: Version,
-transitionTimes: []i64,
-transitionTypes: []u8,
-localTimeTypes: []LocalTimeType,
-designations: []u8,
-leapSeconds: []LeapSecond,
-transitionIsStd: []bool,
-transitionIsUT: []bool,
-string: []u8,
+transition_times: []i64 = &.{},
+transition_types: []u8 = &.{},
+local_time_types: []LocalTimeType = &.{},
+designations: []u8 = &.{},
+leap_seconds: []LeapSecond = &.{},
+transition_is_std: []bool = &.{},
+transition_is_UT: []bool = &.{},
+string: []u8 = &.{},
 posixTZ: ?Posix,
 
 const TZif = @This();
 
 pub fn deinit(this: *@This()) void {
-    this.allocator.free(this.transitionTimes);
-    this.allocator.free(this.transitionTypes);
-    this.allocator.free(this.localTimeTypes);
+    this.allocator.free(this.transition_times);
+    this.allocator.free(this.transition_types);
+    this.allocator.free(this.local_time_types);
     this.allocator.free(this.designations);
-    this.allocator.free(this.leapSeconds);
-    this.allocator.free(this.transitionIsStd);
-    this.allocator.free(this.transitionIsUT);
+    this.allocator.free(this.leap_seconds);
+    this.allocator.free(this.transition_is_std);
+    this.allocator.free(this.transition_is_UT);
     this.allocator.free(this.string);
 }
 
@@ -38,12 +38,12 @@ pub fn timeZone(this: *@This()) chrono.tz.TimeZone {
 }
 
 pub fn offsetAtTimestamp(this: *const @This(), utc: i64) ?i32 {
-    const transition_type_by_timestamp = getTransitionTypeByTimestamp(this.transitionTimes, utc);
+    const transition_type_by_timestamp = getTransitionTypeByTimestamp(this.transition_times, utc);
     switch (transition_type_by_timestamp) {
-        .first_local_time_type => return this.localTimeTypes[0].ut_offset,
+        .first_local_time_type => return this.local_time_types[0].ut_offset,
         .transition_index => |transition_index| {
-            const local_time_type_idx = this.transitionTypes[transition_index];
-            const local_time_type = this.localTimeTypes[local_time_type_idx];
+            const local_time_type_idx = this.transition_types[transition_index];
+            const local_time_type = this.local_time_types[local_time_type_idx];
             return local_time_type.ut_offset;
         },
         .specified_by_posix_tz,
@@ -54,7 +54,7 @@ pub fn offsetAtTimestamp(this: *const @This(), utc: i64) ?i32 {
         } else {
             switch (transition_type_by_timestamp) {
                 .specified_by_posix_tz => return null,
-                .specified_by_posix_tz_or_index_0 => return this.localTimeTypes[0].ut_offset,
+                .specified_by_posix_tz_or_index_0 => return this.local_time_types[0].ut_offset,
                 else => unreachable,
             }
         },
@@ -62,12 +62,12 @@ pub fn offsetAtTimestamp(this: *const @This(), utc: i64) ?i32 {
 }
 
 pub fn isDaylightSavingTimeAtTimestamp(this: *const @This(), utc: i64) ?bool {
-    const transition_type_by_timestamp = getTransitionTypeByTimestamp(this.transitionTimes, utc);
+    const transition_type_by_timestamp = getTransitionTypeByTimestamp(this.transition_times, utc);
     switch (transition_type_by_timestamp) {
-        .first_local_time_type => return this.localTimeTypes[0].is_daylight_saving_time,
+        .first_local_time_type => return this.local_time_types[0].is_daylight_saving_time,
         .transition_index => |transition_index| {
-            const local_time_type_idx = this.transitionTypes[transition_index];
-            const local_time_type = this.localTimeTypes[local_time_type_idx];
+            const local_time_type_idx = this.transition_types[transition_index];
+            const local_time_type = this.local_time_types[local_time_type_idx];
             return local_time_type.is_daylight_saving_time;
         },
         .specified_by_posix_tz,
@@ -79,7 +79,7 @@ pub fn isDaylightSavingTimeAtTimestamp(this: *const @This(), utc: i64) ?bool {
             switch (transition_type_by_timestamp) {
                 .specified_by_posix_tz => return null,
                 .specified_by_posix_tz_or_index_0 => {
-                    return this.localTimeTypes[0].is_daylight_saving_time;
+                    return this.local_time_types[0].is_daylight_saving_time;
                 },
                 else => unreachable,
             }
@@ -88,10 +88,10 @@ pub fn isDaylightSavingTimeAtTimestamp(this: *const @This(), utc: i64) ?bool {
 }
 
 pub fn designationAtTimestamp(this: *const @This(), utc: i64) ?[]const u8 {
-    const transition_type_by_timestamp = getTransitionTypeByTimestamp(this.transitionTimes, utc);
+    const transition_type_by_timestamp = getTransitionTypeByTimestamp(this.transition_times, utc);
     switch (transition_type_by_timestamp) {
         .first_local_time_type => {
-            const local_time_type = this.localTimeTypes[0];
+            const local_time_type = this.local_time_types[0];
 
             const designation_end = std.mem.indexOfScalarPos(u8, this.designations[0 .. this.designations.len - 1], local_time_type.designation_index, 0) orelse this.designations.len - 1;
             const designation = this.designations[local_time_type.designation_index..designation_end];
@@ -99,8 +99,8 @@ pub fn designationAtTimestamp(this: *const @This(), utc: i64) ?[]const u8 {
             return designation;
         },
         .transition_index => |transition_index| {
-            const local_time_type_idx = this.transitionTypes[transition_index];
-            const local_time_type = this.localTimeTypes[local_time_type_idx];
+            const local_time_type_idx = this.transition_types[transition_index];
+            const local_time_type = this.local_time_types[local_time_type_idx];
 
             const designation_end = std.mem.indexOfScalarPos(u8, this.designations[0 .. this.designations.len - 1], local_time_type.designation_index, 0) orelse this.designations.len - 1;
             const designation = this.designations[local_time_type.designation_index..designation_end];
@@ -116,7 +116,7 @@ pub fn designationAtTimestamp(this: *const @This(), utc: i64) ?[]const u8 {
             switch (transition_type_by_timestamp) {
                 .specified_by_posix_tz => return null,
                 .specified_by_posix_tz_or_index_0 => {
-                    const local_time_type = this.localTimeTypes[0];
+                    const local_time_type = this.local_time_types[0];
 
                     const designation_end = std.mem.indexOfScalarPos(u8, this.designations[0 .. this.designations.len - 1], local_time_type.designation_index, 0) orelse this.designations.len - 1;
                     const designation = this.designations[local_time_type.designation_index..designation_end];
@@ -231,114 +231,130 @@ pub const Header = struct {
     }
 
     pub fn parse(reader: *std.Io.Reader) !Header {
-        try reader.interface.take(4);
-        if (!std.mem.eql(u8, "TZif", reader.interface.buffered())) {
+        if (!std.mem.eql(u8, "TZif", try reader.take(4))) {
             log.warn("File is missing magic string 'TZif'", .{});
             return error.InvalidFormat;
         }
 
         // Check verison
-        const version = reader.interface.takeEnum(Version, .little) catch |err| switch (err) {
-            error.InvalidValue => return error.UnsupportedVersion,
+        const version = reader.takeEnum(Version, .little) catch |err| switch (err) {
+            error.InvalidEnumTag => return error.UnsupportedVersion,
             else => |e| return e,
         };
         if (version == .V1) {
             return error.UnsupportedVersion;
         }
         // Seek past reserved bytes
-        try reader.interface.toss(15);
+        reader.toss(15);
 
         return Header{
             .version = version,
-            .isutcnt = try reader.interface.takeInt(u32, .big),
-            .isstdcnt = try reader.interface.takeInt(u32, .big),
-            .leapcnt = try reader.interface.takeInt(u32, .big),
-            .timecnt = try reader.interface.takeInt(u32, .big),
-            .typecnt = try reader.interface.takeInt(u32, .big),
-            .charcnt = try reader.interface.takeInt(u32, .big),
+            .isutcnt = try reader.takeInt(u32, .big),
+            .isstdcnt = try reader.takeInt(u32, .big),
+            .leapcnt = try reader.takeInt(u32, .big),
+            .timecnt = try reader.takeInt(u32, .big),
+            .typecnt = try reader.takeInt(u32, .big),
+            .charcnt = try reader.takeInt(u32, .big),
         };
     }
 };
 
 pub fn parse(
     allocator: std.mem.Allocator,
-    io: std.Io,
     reader: *std.Io.Reader,
 ) !TZif {
-    const v1_header = try Header.parse(io, reader);
-    try reader.interface.toss(v1_header.dataSize(.V1));
+    var res = std.mem.zeroInit(TZif, .{ .allocator = allocator });
+    errdefer res.deinit();
+    const v1_header = try Header.parse(reader);
+    reader.toss(v1_header.dataSize(.V1));
 
-    const v2_header = try Header.parse(io, reader);
+    const v2_header = try Header.parse(reader);
+    res.version = v2_header.version;
 
     // Parse transition times
-    var transition_times = try allocator.alloc(i64, v2_header.timecnt);
-    defer allocator.free(transition_times);
+    res.transition_times =
+        try allocator.alloc(i64, v2_header.timecnt);
     {
         var prev: i64 = -(2 << 59); // Earliest time supported, this is earlier than the big bang
         var i: usize = 0;
-        while (i < transition_times.len) : (i += 1) {
-            transition_times[i] = try reader.takeInt(i64, .big);
-            if (transition_times[i] <= prev) {
+        while (i < res.transition_times.len) : (i += 1) {
+            res.transition_times[i] = try reader.takeInt(i64, .big);
+            if (res.transition_times[i] <= prev) {
                 return error.InvalidFormat;
             }
-            prev = transition_times[i];
+            prev = res.transition_times[i];
         }
     }
 
     // Parse transition types
-    const transition_types = try allocator.alloc(u8, v2_header.timecnt);
-    defer allocator.free(transition_types);
-    try reader.readNoEof(transition_types);
-    for (transition_types) |transition_type| {
+    res.transition_types = try allocator.alloc(u8, v2_header.timecnt);
+    try reader.readSliceAll(res.transition_types);
+    for (res.transition_types) |transition_type| {
         if (transition_type >= v2_header.typecnt) {
             return error.InvalidFormat; // a transition type index is out of bounds
         }
     }
 
     // Parse local time type records
-    var local_time_types = try allocator.alloc(LocalTimeType, v2_header.typecnt);
-    errdefer allocator.free(local_time_types);
+    res.local_time_types =
+        try allocator.alloc(LocalTimeType, v2_header.typecnt);
     {
         var i: usize = 0;
-        while (i < local_time_types.len) : (i += 1) {
-            local_time_types[i].ut_offset = try reader.readInt(i32, .big);
-            local_time_types[i].is_daylight_saving_time = switch (try reader.readByte()) {
-                0 => false,
-                1 => true,
-                else => return error.InvalidFormat,
-            };
+        while (i < res.local_time_types.len) : (i += 1) {
+            res.local_time_types[i].ut_offset =
+                try reader.takeInt(i32, .big);
+            res.local_time_types[i].is_daylight_saving_time =
+                switch (try reader.takeByte()) {
+                    0 => false,
+                    1 => true,
+                    else => return error.InvalidFormat,
+                };
 
-            local_time_types[i].designation_index = try reader.readByte();
-            if (local_time_types[i].designation_index >= v2_header.charcnt) {
+            res.local_time_types[i].designation_index =
+                try reader.takeByte();
+            if (res.local_time_types[i].designation_index >=
+                v2_header.charcnt)
+            {
                 return error.InvalidFormat;
             }
         }
     }
 
     // Read designations
-    const time_zone_designations = try allocator.alloc(u8, v2_header.charcnt);
-    errdefer allocator.free(time_zone_designations);
-    try reader.readNoEof(time_zone_designations);
+    res.designations = try allocator.alloc(u8, v2_header.charcnt);
+    try reader.readSliceAll(res.designations);
 
     // Parse leap seconds records
-    var leap_seconds = try allocator.alloc(LeapSecond, v2_header.leapcnt);
-    errdefer allocator.free(leap_seconds);
+    res.leap_seconds =
+        try allocator.alloc(LeapSecond, v2_header.leapcnt);
     {
         var i: usize = 0;
-        while (i < leap_seconds.len) : (i += 1) {
-            leap_seconds[i].occur = try reader.readInt(i64, .big);
-            if (i == 0 and leap_seconds[i].occur < 0) {
+        while (i < res.leap_seconds.len) : (i += 1) {
+            res.leap_seconds[i].occur = try reader.takeInt(i64, .big);
+            if (i == 0 and res.leap_seconds[i].occur < 0) {
                 return error.InvalidFormat;
-            } else if (i != 0 and leap_seconds[i].occur - leap_seconds[i - 1].occur < 2419199) {
-                return error.InvalidFormat; // There must be at least 28 days worth of seconds between leap seconds
+            } else if (i != 0 and
+                res.leap_seconds[i].occur -
+                    res.leap_seconds[i - 1].occur < 2419199)
+            {
+                // There must be at least 28 days worth of seconds
+                // between leap seconds
+                return error.InvalidFormat;
             }
 
-            leap_seconds[i].corr = try reader.readInt(i32, .big);
-            if (i == 0 and (leap_seconds[0].corr != 1 and leap_seconds[0].corr != -1)) {
-                log.warn("First leap second correction is not 1 or -1: {}", .{leap_seconds[0]});
+            res.leap_seconds[i].corr = try reader.takeInt(i32, .big);
+            if (i == 0 and
+                (res.leap_seconds[0].corr != 1 and
+                    res.leap_seconds[0].corr != -1))
+            {
+                log.warn(
+                    "First leap second correction is not 1 or -1: {}",
+                    .{res.leap_seconds[0]},
+                );
                 return error.InvalidFormat;
             } else if (i != 0) {
-                const diff = leap_seconds[i].corr - leap_seconds[i - 1].corr;
+                const diff = res.leap_seconds[i].corr -
+                    res.leap_seconds[i - 1].corr;
                 if (diff != 1 and diff != -1) {
                     log.warn("Too large of a difference between leap seconds: {}", .{diff});
                     return error.InvalidFormat;
@@ -348,12 +364,12 @@ pub fn parse(
     }
 
     // Parse standard/wall indicators
-    var transition_is_std = try allocator.alloc(bool, v2_header.isstdcnt);
-    errdefer allocator.free(transition_is_std);
+    res.transition_is_std =
+        try allocator.alloc(bool, v2_header.isstdcnt);
     {
         var i: usize = 0;
-        while (i < transition_is_std.len) : (i += 1) {
-            transition_is_std[i] = switch (try reader.readByte()) {
+        while (i < res.transition_is_std.len) : (i += 1) {
+            res.transition_is_std[i] = switch (try reader.takeByte()) {
                 1 => true,
                 0 => false,
                 else => return error.InvalidFormat,
@@ -362,12 +378,11 @@ pub fn parse(
     }
 
     // Parse UT/local indicators
-    var transition_is_ut = try allocator.alloc(bool, v2_header.isutcnt);
-    errdefer allocator.free(transition_is_ut);
+    res.transition_is_UT = try allocator.alloc(bool, v2_header.isutcnt);
     {
         var i: usize = 0;
-        while (i < transition_is_ut.len) : (i += 1) {
-            transition_is_ut[i] = switch (try reader.readByte()) {
+        while (i < res.transition_is_UT.len) : (i += 1) {
+            res.transition_is_UT[i] = switch (try reader.takeByte()) {
                 1 => true,
                 0 => false,
                 else => return error.InvalidFormat,
@@ -376,28 +391,30 @@ pub fn parse(
     }
 
     // Parse TZ string from footer
-    if ((try reader.readByte()) != '\n') return error.InvalidFormat;
-    const tz_string = try reader.readUntilDelimiterAlloc(allocator, '\n', 60);
-    errdefer allocator.free(tz_string);
+    if ((try reader.takeByte()) != '\n') return error.InvalidFormat;
+    res.string = try allocator.dupe(
+        u8,
+        try reader.takeDelimiterExclusive('\n'),
+    );
 
-    const posixTZ: ?Posix = if (tz_string.len > 0)
-        try Posix.parse(tz_string)
+    res.posixTZ = if (res.string.len > 0)
+        try Posix.parse(res.string)
     else
         null;
-
-    return TZif{
-        .allocator = allocator,
-        .version = v2_header.version,
-        .transitionTimes = try allocator.dupe(i64, transition_times),
-        .transitionTypes = try allocator.dupe(u8, transition_types),
-        .localTimeTypes = local_time_types,
-        .designations = time_zone_designations,
-        .leapSeconds = leap_seconds,
-        .transitionIsStd = transition_is_std,
-        .transitionIsUT = transition_is_ut,
-        .string = tz_string,
-        .posixTZ = posixTZ,
-    };
+    return res;
+    // return TZif{
+    //     .allocator = allocator,
+    //     .version = v2_header.version,
+    //     .transition_times = try allocator.dupe(i64, transition_times),
+    //     .transition_types = try allocator.dupe(u8, transition_types),
+    //     .local_time_types = local_time_types,
+    //     .designations = time_zone_designations,
+    //     .leap_seconds = leap_seconds,
+    //     .transition_is_std = transition_is_std,
+    //     .transition_is_UT = transition_is_ut,
+    //     .string = tz_string,
+    //     .posixTZ = posixTZ,
+    // };
 }
 
 pub fn parseFile(allocator: std.mem.Allocator, path: []const u8) !TZif {
@@ -493,20 +510,27 @@ test getTransitionTypeByTimestamp {
 }
 
 test "parse invalid bytes" {
-    var fbs = std.io.fixedBufferStream("dflkasjreklnlkvnalkfek");
-    try testing.expectError(error.InvalidFormat, parse(std.testing.allocator, fbs.reader(), fbs.seekableStream()));
+    var reader: std.Io.Reader = .fixed("dflkasjreklnlkvnalkfek");
+    try testing.expectError(error.InvalidFormat, parse(
+        std.testing.allocator,
+        &reader,
+    ));
 }
 
 test "parse UTC zoneinfo" {
-    var fbs = std.io.fixedBufferStream(@embedFile("zoneinfo/UTC"));
+    var reader: std.Io.Reader = .fixed(@embedFile("zoneinfo/UTC"));
 
-    var res = try parse(std.testing.allocator, fbs.reader(), fbs.seekableStream());
+    var res = try parse(std.testing.allocator, &reader);
     defer res.deinit();
 
     try testing.expectEqual(Version.V2, res.version);
-    try testing.expectEqualSlices(i64, &[_]i64{}, res.transitionTimes);
-    try testing.expectEqualSlices(u8, &[_]u8{}, res.transitionTypes);
-    try testing.expectEqualSlices(LocalTimeType, &[_]LocalTimeType{.{ .ut_offset = 0, .is_daylight_saving_time = false, .designation_index = 0 }}, res.localTimeTypes);
+    try testing.expectEqualSlices(i64, &[_]i64{}, res.transition_times);
+    try testing.expectEqualSlices(u8, &[_]u8{}, res.transition_types);
+    try testing.expectEqualSlices(
+        LocalTimeType,
+        &[_]LocalTimeType{.{ .ut_offset = 0, .is_daylight_saving_time = false, .designation_index = 0 }},
+        res.local_time_types,
+    );
     try testing.expectEqualSlices(u8, "UTC\x00", res.designations);
 }
 
@@ -526,18 +550,18 @@ test "parse Pacific/Honolulu zoneinfo and calculate local times" {
     const is_ut = &[6]bool{ false, false, false, false, true, false };
     const string = "HST10";
 
-    var fbs = std.io.fixedBufferStream(@embedFile("zoneinfo/Pacific/Honolulu"));
+    var reader: std.Io.Reader = .fixed(@embedFile("zoneinfo/Pacific/Honolulu"));
 
-    var res = try parse(std.testing.allocator, fbs.reader(), fbs.seekableStream());
+    var res = try parse(std.testing.allocator, &reader);
     defer res.deinit();
 
     try testing.expectEqual(Version.V2, res.version);
-    try testing.expectEqualSlices(i64, &transition_times, res.transitionTimes);
-    try testing.expectEqualSlices(u8, &transition_types, res.transitionTypes);
-    try testing.expectEqualSlices(LocalTimeType, &local_time_types, res.localTimeTypes);
+    try testing.expectEqualSlices(i64, &transition_times, res.transition_times);
+    try testing.expectEqualSlices(u8, &transition_types, res.transition_types);
+    try testing.expectEqualSlices(LocalTimeType, &local_time_types, res.local_time_types);
     try testing.expectEqualSlices(u8, designations, res.designations);
-    try testing.expectEqualSlices(bool, is_std, res.transitionIsStd);
-    try testing.expectEqualSlices(bool, is_ut, res.transitionIsUT);
+    try testing.expectEqualSlices(bool, is_std, res.transition_is_std);
+    try testing.expectEqualSlices(bool, is_ut, res.transition_is_UT);
     try testing.expectEqualSlices(u8, string, res.string);
 
     {
