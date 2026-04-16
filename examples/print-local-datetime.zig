@@ -11,7 +11,7 @@ pub fn main(init: std.process.Init) !void {
 
     const timezone = try tzdb.getLocalTimeZone();
     const clock: std.Io.Clock = .real;
-    const timestamp_nano = try clock.now(io);
+    const timestamp_nano = clock.now(io);
     const timestamp_utc = timestamp_nano.toSeconds();
     const local_offset = timezone.offsetAtTimestamp(timestamp_utc) orelse {
         std.debug.print("Could not convert the current time to local time.", .{});
