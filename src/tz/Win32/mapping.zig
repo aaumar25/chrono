@@ -18,7 +18,7 @@ pub fn constructWindowsToIANAHashmap(gpa: std.mem.Allocator) !WindowsToIANAHashm
     var map = WindowsToIANAHashmap{};
     try map.ensureUnusedCapacity(gpa, DATA.len);
     for (DATA) |datapoint| {
-        var identifiers: std.ArrayList(chrono.tz.Identifier) = .{};
+        var identifiers: std.ArrayList(chrono.tz.Identifier) = .empty;
         defer identifiers.deinit(gpa);
         var iana_identifier_iter = std.mem.splitScalar(
             u8,

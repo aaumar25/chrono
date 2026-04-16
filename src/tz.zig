@@ -207,7 +207,7 @@ pub const DataBase = struct {
             return error.InvalidEtcLocalTimeSymlink;
         }
 
-        var identifier_string: std.ArrayList(u8) = .{};
+        var identifier_string: std.ArrayList(u8) = .empty;
         defer identifier_string.deinit(this.gpa);
 
         while (component_iter.next()) |component| {

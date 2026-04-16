@@ -61,7 +61,7 @@ pub fn offsetAtTimestamp(this: *const @This(), timestamp_utc: i64) ?i32 {
     var dynamic_time_zone_info = this.dynamic_time_zone_information;
 
     var time_zone_info: TIME_ZONE_INFORMATION = undefined;
-    if (GetTimeZoneInformationForYear(@intCast(ymd.year), &dynamic_time_zone_info, &time_zone_info) == 0) {
+    if (GetTimeZoneInformationForYear(@intCast(ymd.year), &dynamic_time_zone_info, &time_zone_info).toBool() == false) {
         return null;
     }
 
@@ -78,7 +78,7 @@ pub fn isDaylightSavingTimeAtTimestamp(this: *const @This(), timestamp_utc: i64)
     var dynamic_time_zone_info = this.dynamic_time_zone_information;
 
     var time_zone_info: TIME_ZONE_INFORMATION = undefined;
-    if (GetTimeZoneInformationForYear(@intCast(ymd.year), &dynamic_time_zone_info, &time_zone_info) == 0) {
+    if (GetTimeZoneInformationForYear(@intCast(ymd.year), &dynamic_time_zone_info, &time_zone_info).toBool() == false) {
         return null;
     }
 
@@ -91,7 +91,7 @@ pub fn designationAtTimestamp(this: *const @This(), timestamp_utc: i64) ?[]const
     var dynamic_time_zone_info = this.dynamic_time_zone_information;
 
     var time_zone_info: TIME_ZONE_INFORMATION = undefined;
-    if (GetTimeZoneInformationForYear(@intCast(ymd.year), &dynamic_time_zone_info, &time_zone_info) == 0) {
+    if (GetTimeZoneInformationForYear(@intCast(ymd.year), &dynamic_time_zone_info, &time_zone_info).toBool() == false) {
         return null;
     }
 
