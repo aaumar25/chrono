@@ -22,10 +22,12 @@ test UTC {
 
 pub const DataBase = struct {
     gpa: std.mem.Allocator,
+    io: std.Io,
+    environ: std.process.Environ,
     tz_env_var: ?[]const u8 = null,
     localtime_identifier: ?[]const u8 = null,
 
-    tzif_dir: ?std.fs.Dir,
+    tzif_dir: ?std.Io.Dir,
     tzif_cache: std.StringHashMapUnmanaged(*TZif) = .{},
 
     /// A hashmap mapping Windows' timezone keys to IANA timezone keys
@@ -34,19 +36,26 @@ pub const DataBase = struct {
 
     const platform_supports_win32 = builtin.target.os.tag == .windows;
 
-    pub fn init(gpa: std.mem.Allocator) !@This() {
-        const cwd = std.fs.cwd();
-
-        const tzdir_err_opt = if (std.process.getEnvVarOwned(gpa, "TZDIR")) |tzdir| open_tzdir: {
+    pub fn init(
+        gpa: std.mem.Allocator,
+        io: std.Io,
+        environ: std.process.Environ,
+    ) !@This() {
+        const cwd = std.Io.Dir.cwd();
+        const tzdir_err_opt = if (environ.getAlloc(gpa, "TZDIR")) |tzdir| open_tzdir: {
             defer gpa.free(tzdir);
-            break :open_tzdir cwd.openDir(tzdir, .{});
+            break :open_tzdir cwd.openDir(io, tzdir, .{});
         } else |err| switch (err) {
             // Continue on to other methods if the environement variable is not found
-            error.EnvironmentVariableNotFound => cwd.openDir("/usr/share/zoneinfo", .{}),
+            error.EnvironmentVariableMissing => cwd.openDir(
+                io,
+                "/usr/share/zoneinfo",
+                .{},
+            ),
             else => return err,
         };
 
-        const tzif_dir: ?std.fs.Dir = tzdir_err_opt catch null;
+        const tzif_dir: ?std.Io.Dir = tzdir_err_opt catch null;
 
         const win32_timezone_key_mapping = if (platform_supports_win32) try gpa.create(Win32.mapping.WindowsToIANAHashmap);
         if (platform_supports_win32) {
@@ -55,6 +64,8 @@ pub const DataBase = struct {
 
         return @This(){
             .gpa = gpa,
+            .io = io,
+            .environ = environ,
             .tzif_dir = tzif_dir,
             .win32_timezone_mapping = win32_timezone_key_mapping,
         };
@@ -89,7 +100,7 @@ pub const DataBase = struct {
         }
 
         if (this.tzif_dir) |*tzif_dir| {
-            tzif_dir.close();
+            tzif_dir.close(this.io);
         }
     }
 
@@ -100,17 +111,22 @@ pub const DataBase = struct {
         }
 
         if (this.tzif_dir) |tzif_dir| parse_tzif_file: {
-            const tzif_file = tzif_dir.openFile(identifier.string, .{}) catch |err| switch (err) {
+            const tzif_file = tzif_dir.openFile(
+                this.io,
+                identifier.string,
+                .{},
+            ) catch |err| switch (err) {
                 error.FileNotFound => {
-                    log.debug("IANA identifier not found in zoneinfo dir: \"{}\"", .{std.zig.fmtEscapes(identifier.string)});
+                    log.debug("IANA identifier not found in zoneinfo dir: \"{}\"", .{std.zig.fmtString(identifier.string)});
                     break :parse_tzif_file;
                 },
                 else => return err,
             };
-            defer tzif_file.close();
-
+            defer tzif_file.close(this.io);
+            var reader_buf: [4096]u8 = undefined;
+            var file_reader = tzif_file.reader(this.io, &reader_buf);
             const tzif = try this.gpa.create(TZif);
-            tzif.* = try TZif.parse(this.gpa, tzif_file.reader(), tzif_file.seekableStream());
+            tzif.* = try TZif.parse(this.gpa, &file_reader.interface);
 
             const identifier_owned = try this.gpa.dupe(u8, identifier.string);
             try this.tzif_cache.putNoClobber(this.gpa, identifier_owned, tzif);
@@ -153,12 +169,12 @@ pub const DataBase = struct {
     }
 
     fn getLocalTimeZoneFromTZEnvVar(this: *@This()) !?TimeZone {
-        const tz_env_var = this.tz_env_var orelse if (std.process.getEnvVarOwned(this.gpa, "TZ")) |tz_env| store_tz_env_var: {
+        const tz_env_var = this.tz_env_var orelse if (this.environ.getAlloc(this.gpa, "TZ")) |tz_env| store_tz_env_var: {
             this.tz_env_var = tz_env;
             break :store_tz_env_var tz_env;
         } else |err| switch (err) {
             // Continue on to other methods if the environement variable is not found
-            error.EnvironmentVariableNotFound => return null,
+            error.EnvironmentVariableMissing => return null,
             else => return err,
         };
 
@@ -169,16 +185,20 @@ pub const DataBase = struct {
     }
 
     fn getLocalTimeZoneFromEtcLocaltime(this: *@This()) !?TimeZone {
-        const cwd = std.fs.cwd();
+        const cwd = std.Io.Dir.cwd();
 
         var path_to_localtime_buf: [std.fs.max_path_bytes]u8 = undefined;
-        const path_to_localtime = cwd.readLink("/etc/localtime", &path_to_localtime_buf) catch |err| switch (err) {
+        _ = cwd.readLink(
+            this.io,
+            "/etc/localtime",
+            &path_to_localtime_buf,
+        ) catch |err| switch (err) {
             error.FileNotFound => return null,
             else => return err,
         };
 
         // TODO: Make it not rely on the path containing "/zoneinfo/"?
-        var component_iter = try std.fs.path.componentIterator(path_to_localtime);
+        var component_iter = std.fs.path.componentIterator(&path_to_localtime_buf);
         while (component_iter.next()) |component| {
             if (std.mem.eql(u8, component.name, "zoneinfo")) {
                 break;
@@ -187,18 +207,20 @@ pub const DataBase = struct {
             return error.InvalidEtcLocalTimeSymlink;
         }
 
-        var identifier_string = std.ArrayList(u8).init(this.gpa);
-        defer identifier_string.deinit();
+        var identifier_string: std.ArrayList(u8) = .empty;
+        defer identifier_string.deinit(this.gpa);
 
         while (component_iter.next()) |component| {
-            if (identifier_string.items.len > 0) try identifier_string.append('/');
-            try identifier_string.appendSlice(component.name);
+            if (identifier_string.items.len > 0)
+                try identifier_string.append(this.gpa, '/');
+            try identifier_string.appendSlice(this.gpa, component.name);
         }
 
         const identifier = try Identifier.parse(identifier_string.items);
         const timezone = try this.getTimeZone(identifier);
 
-        this.localtime_identifier = try identifier_string.toOwnedSlice();
+        this.localtime_identifier =
+            try identifier_string.toOwnedSlice(this.gpa);
 
         return timezone;
     }

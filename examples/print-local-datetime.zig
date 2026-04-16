@@ -1,17 +1,18 @@
 const std = @import("std");
 const chrono = @import("chrono");
 
-pub fn main() !void {
-    var gpa_allocator = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa_allocator.deinit();
-    const gpa = gpa_allocator.allocator();
+pub fn main(init: std.process.Init) !void {
+    const io = init.io;
+    const gpa = init.gpa;
+    const environ = init.minimal.environ;
 
-    var tzdb = try chrono.tz.DataBase.init(gpa);
+    var tzdb = try chrono.tz.DataBase.init(gpa, io, environ);
     defer tzdb.deinit();
 
     const timezone = try tzdb.getLocalTimeZone();
-
-    const timestamp_utc = std.time.timestamp();
+    const clock: std.Io.Clock = .real;
+    const timestamp_nano = clock.now(io);
+    const timestamp_utc = timestamp_nano.toSeconds();
     const local_offset = timezone.offsetAtTimestamp(timestamp_utc) orelse {
         std.debug.print("Could not convert the current time to local time.", .{});
         return error.ConversionFailed;
@@ -26,7 +27,7 @@ pub fn main() !void {
     std.debug.print("The current date is {}, and the time is {} in the {?s} timezone\n", .{ date, time, designation });
 
     if (timezone.identifier()) |identifier| {
-        std.debug.print("The IANA time zone identifier = \"{}\"\n", .{std.zig.fmtEscapes(identifier.string)});
+        std.debug.print("The IANA time zone identifier = \"{}\"\n", .{std.zig.fmtString(identifier.string)});
     } else {
         std.debug.print("The IANA time zone identifier is unknown\n", .{});
     }
